@@ -105,7 +105,7 @@ def LoadPSKFile(filePath):
     for i, wedge in enumerate(pskfile.wedges):
         vertexArray.append(
             pskfile.vertices[wedge.point].offset[0],
-            pskfile.vertices[wedge.point].offset[1], 
+            pskfile.vertices[wedge.point].offset[1],
             pskfile.vertices[wedge.point].offset[2])
         uArray.append(wedge.uv[0])
         vArray.append(1 - wedge.uv[1])
@@ -132,7 +132,8 @@ def LoadPSKFile(filePath):
     mesh.setUVs(uArray, vArray)
     mesh.assignUVs(polygonCounts, polygonConnects)
     # Create Groups and assign Material/s
-    mtransform = OpenMaya.MFnTransform().create()
+    mtransform = OpenMaya.MFnTransform()
+    bone_group = mtransform.create()
     mtransform.setName("PSKMeshes")
     dagPath = OpenMaya.MDagPath()
     OpenMaya.MDagPath.getAPathTo(transform, dagPath)
