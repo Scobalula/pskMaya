@@ -1,5 +1,5 @@
 # pskMaya
-Unreal PSK Importer for Autodesk Maya, currently only supports mesh and skeletal data.
+Unreal PSK Importer for Autodesk Maya, supports skeletal- & static meshes
 
 # Disclaimer
 

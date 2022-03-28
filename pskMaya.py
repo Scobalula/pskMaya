@@ -41,8 +41,10 @@ def Reload():
     reload(psk)
 
 def SelectPSKFile():
+    multipleFilters = "PSK Skeletal Mesh (*.psk);;PSK Static Mesh (*.pskx);;All Files (*.*)"
+
     psk_file = cmds.fileDialog2(
-        fileFilter="PSK File (*.psk)",
+        fileFilter=multipleFilters,
         dialogStyle=2,
         fileMode=1)
 
@@ -61,29 +63,36 @@ def LoadPSKFile(filePath):
     # Create Joints
     joints = []
     mjoints = []
-    mtransform = OpenMaya.MFnTransform()
-    bone_group = mtransform.create()
-    mtransform.setName("PSKJoints")
-    for i, joint in enumerate(pskfile.bones):
-        mbone = OpenMayaAnim.MFnIkJoint()
-        if i == 0:
-            bone = mbone.create(bone_group)
-        else:
-            bone = mbone.create(joints[joint.parent])
-        mbone.setName(joint.name)
-        mbone.setOrientation(OpenMaya.MQuaternion(
-            -joint.rotation[0],
-            -joint.rotation[1],
-            -joint.rotation[2],
-            joint.rotation[3]))
-        mbone.setTranslation(OpenMaya.MVector(
-            joint.offset[0],
-            joint.offset[1],
-            joint.offset[2]),
-            OpenMaya.MSpace.kTransform)
-        joints.append(bone)
-        mjoints.append(mbone)
-        weightIndices.append(i)
+
+    # All this data is irrelevant if static mesh
+    # Also there's probably a better way to go about this, but I needed a quick way because having-
+    # blender as an intermediate step was annoying - Raysdev (28/03/2022)
+    if filePath.find(".pskx") == -1:
+        mtransform = OpenMaya.MFnTransform()
+        bone_group = mtransform.create()
+        mtransform.setName("PSKJoints")
+
+        for i, joint in enumerate(pskfile.bones):
+            mbone = OpenMayaAnim.MFnIkJoint()
+            if i == 0:
+                bone = mbone.create(bone_group)
+            else:
+                bone = mbone.create(joints[joint.parent])
+            mbone.setName(joint.name)
+            mbone.setOrientation(OpenMaya.MQuaternion(
+                -joint.rotation[0],
+                -joint.rotation[1],
+                -joint.rotation[2],
+                joint.rotation[3]))
+            mbone.setTranslation(OpenMaya.MVector(
+                joint.offset[0],
+                joint.offset[1],
+                joint.offset[2]),
+                OpenMaya.MSpace.kTransform)
+            joints.append(bone)
+            mjoints.append(mbone)
+            weightIndices.append(i)
+
     # Create Maya Arrays
     weightVals = OpenMaya.MDoubleArray(len(pskfile.wedges) * weightIndices.length())
     vertexArray = OpenMaya.MFloatPointArray()
@@ -109,10 +118,14 @@ def LoadPSKFile(filePath):
             pskfile.vertices[wedge.point].offset[2])
         uArray.append(wedge.uv[0])
         vArray.append(1 - wedge.uv[1])
-        weights = pskfile.weights[wedge.point]
-        for j in range(weightIndices.length()):
-            weightVals[weight] = weights[j]
-            weight += 1
+
+        # Don't add weights if it's a static mesh - Raysdev (28/03/2022)
+        if filePath.find(".pskx") == -1:
+            weights = pskfile.weights[wedge.point]
+            for j in range(weightIndices.length()):
+                weightVals[weight] = weights[j]
+                weight += 1
+
     # Add Face Data
     fid = 0
     for i, face in enumerate(pskfile.faces):
@@ -134,12 +147,19 @@ def LoadPSKFile(filePath):
     # Create Groups and assign Material/s
     mtransform = OpenMaya.MFnTransform()
     bone_group = mtransform.create()
-    mtransform.setName("PSKMeshes")
+
+    # Different mesh name to differentiate static vs skeletal mesh - Raysdev (28/03/2022)
+    meshName = "PSKXMesh"
+    if filePath.find(".pskx") == -1:
+        meshName = "PSKMeshes"
+    
+    mtransform.setName(meshName)
     dagPath = OpenMaya.MDagPath()
     OpenMaya.MDagPath.getAPathTo(transform, dagPath)
-    newPath = cmds.parent(dagPath.fullPathName(), "PSKMeshes")
-    newPath = cmds.rename(newPath, "PSKMesh")
+    newPath = cmds.parent(dagPath.fullPathName(), meshName)
+    newPath = cmds.rename(newPath, "Mesh")
     cmds.select(newPath)
+
     # TODO: Improve on face Materials, currently in all
     # cases I've found material faces to run in a series
     # but I'm unsure if they can be spread out and might throw this off
@@ -152,17 +172,20 @@ def LoadPSKFile(filePath):
         cmds.select(joint.partialPathName(), add = True)
     cmds.select(newPath, add = True)
     # Set Weights
-    cluster = cmds.skinCluster(tsb = True)
-    selList = OpenMaya.MSelectionList()
-    selList.add(cluster[0])
-    clusterNode = OpenMaya.MObject()
-    selList.getDependNode(0, clusterNode)
-    skin = OpenMayaAnim.MFnSkinCluster(clusterNode)
-    cmds.select(clear = True)
-    skin.setWeights(
-        dagPath,
-        mObj,
-        weightIndices,
-        weightVals)
+
+    # Static mesh - weights are irrelevant - Raysdev (28/03/2022)
+    if filePath.find(".pskx") == -1:
+        cluster = cmds.skinCluster(tsb = True)
+        selList = OpenMaya.MSelectionList()
+        selList.add(cluster[0])
+        clusterNode = OpenMaya.MObject()
+        selList.getDependNode(0, clusterNode)
+        skin = OpenMayaAnim.MFnSkinCluster(clusterNode)
+        cmds.select(clear = True)
+        skin.setWeights(
+            dagPath,
+            mObj,
+            weightIndices,
+            weightVals)
 
 CreateMenu()
