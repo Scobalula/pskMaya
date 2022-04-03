@@ -58,11 +58,29 @@ def LoadPSKFile(filePath):
     # Load PSK File
     pskfile = psk.UnrealPSK(filePath)
     mObj = OpenMaya.MFnSingleIndexedComponent().create(OpenMaya.MFn.kMeshVertComponent)
+
     # Maya Arrays/Data
     weightIndices = OpenMaya.MIntArray()
+
     # Create Joints
     joints = []
     mjoints = []
+
+    # Create bool
+    boolRotateRoot = False
+
+    # Ask the user if they want to rotate it, we don't want to rotate the root if the imported skeleton isn't bad! 
+    # I also don't know if rotating the root will hurt anims when the skeleton is fine, so asking the user seems like the best option - Raysdev (02/04/2022)
+    result = cmds.confirmDialog(
+        title = "Message",
+        message = "Do you want to invert the root?\nPress \"Yes\" if the skeleton is imported upside down!", 
+        button = [
+            "Yes", 
+            "No"], 
+        defaultButton = "Yes")
+
+    if result == "Yes":
+        boolRotateRoot = True
 
     # All this data is irrelevant if static mesh
     # Also there's probably a better way to go about this, but I needed a quick way because having-
@@ -74,21 +92,21 @@ def LoadPSKFile(filePath):
 
         for i, joint in enumerate(pskfile.bones):
             mbone = OpenMayaAnim.MFnIkJoint()
+
             if i == 0:
                 bone = mbone.create(bone_group)
             else:
                 bone = mbone.create(joints[joint.parent])
+
+            # Rotate the root if the skeleton is upside down 
+            # Rotating the root seems to make normal skeletons unaffected, but not sure if it affects animations - Raysdev (02/04/2022)
+            if boolRotateRoot == True and i == 0:
+                mbone.setOrientation(OpenMaya.MQuaternion(joint.rotation[0], joint.rotation[1], joint.rotation[2], joint.rotation[3]))
+            else:
+                mbone.setOrientation(OpenMaya.MQuaternion(-joint.rotation[0], -joint.rotation[1], -joint.rotation[2], joint.rotation[3]))
+
             mbone.setName(joint.name)
-            mbone.setOrientation(OpenMaya.MQuaternion(
-                -joint.rotation[0],
-                -joint.rotation[1],
-                -joint.rotation[2],
-                joint.rotation[3]))
-            mbone.setTranslation(OpenMaya.MVector(
-                joint.offset[0],
-                joint.offset[1],
-                joint.offset[2]),
-                OpenMaya.MSpace.kTransform)
+            mbone.setTranslation(OpenMaya.MVector(joint.offset[0], joint.offset[1], joint.offset[2]), OpenMaya.MSpace.kTransform)
             joints.append(bone)
             mjoints.append(mbone)
             weightIndices.append(i)
@@ -103,12 +121,14 @@ def LoadPSKFile(filePath):
     # Material Faces
     materialPolys = {}
     materials = {}
+
     # Materials
     # Add Materials
     for i, material in enumerate(pskfile.materials):
         shader = cmds.shadingNode("lambert", name=material.name, asShader=True)
         materials[i] = shader
         materialPolys[i] = []
+
     # Add Vertex Data
     weight = 0
     for i, wedge in enumerate(pskfile.wedges):
@@ -133,6 +153,7 @@ def LoadPSKFile(filePath):
         polygonConnects.append(face.wedges[2])
         polygonConnects.append(face.wedges[1])
         materialPolys[face.material_index].append(i)
+
     # Create Maya Mesh
     mesh = OpenMaya.MFnMesh()
     transform = mesh.create(
@@ -141,9 +162,11 @@ def LoadPSKFile(filePath):
         vertexArray,
         polygonCounts,
         polygonConnects)
+
     # Assign UVs
     mesh.setUVs(uArray, vArray)
     mesh.assignUVs(polygonCounts, polygonConnects)
+
     # Create Groups and assign Material/s
     mtransform = OpenMaya.MFnTransform()
     bone_group = mtransform.create()
@@ -165,8 +188,8 @@ def LoadPSKFile(filePath):
     # but I'm unsure if they can be spread out and might throw this off
     for index in materialPolys:
         cmds.select(newPath + ".f[%i:%i]" %
-        (materialPolys[index][0], materialPolys[index][-1]), r=True)
-        cmds.hyperShade(assign=materials[index])
+        (materialPolys[index][0], materialPolys[index][-1]), r = True)
+        cmds.hyperShade(assign = materials[index])
     cmds.select(clear = True)
     for joint in mjoints:
         cmds.select(joint.partialPathName(), add = True)
